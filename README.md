@@ -27,7 +27,7 @@ This script automates the process of setting up Langfuse and a PostgreSQL databa
     
 2.  **Download the Script:**
     
-    Download the `setup-langfuse.sh` script to your desired directory.
+    Download the `setup_langfuse.sh` script to your desired directory.
     
 3.  **Make the Script Executable:**
     
@@ -35,7 +35,7 @@ This script automates the process of setting up Langfuse and a PostgreSQL databa
     
     bashCopy code
     
-    `chmod +x setup-langfuse.sh` 
+    `chmod +x setup_langfuse.sh` 
     
 
 ## Usage
@@ -46,13 +46,13 @@ You can run the script either by passing command-line arguments directly or by u
 
 Provide the necessary configuration details directly as arguments:
 
-`./setup-langfuse.sh [POSTGRES_USER] [POSTGRES_PASSWORD] [POSTGRES_DB] [POSTGRES_PORT] [LANGFUSE_HOST] [NEXTAUTH_URL]` 
+`./setup_langfuse.sh [POSTGRES_USER] [POSTGRES_PASSWORD] [POSTGRES_DB] [POSTGRES_PORT] [LANGFUSE_HOST] [NEXTAUTH_URL]` 
 
 Replace the bracketed terms with your actual PostgreSQL and Langfuse configuration values.
 
 ### Using a YAML Configuration File:
 
-Create a YAML file (e.g., `config.yml`) with the following format:
+Create a YAML file (e.g., `config.yaml`) with the following format:
 
     postgres:
       user: <user>
@@ -62,11 +62,11 @@ Create a YAML file (e.g., `config.yml`) with the following format:
     
     langfuse:
       host: <host>
-      nextauth_url: http://localhost:8084
+      nextauth_url: http://localhost:3000
 
 Run the script without arguments, and when prompted, provide the path to your YAML configuration file:
 
-`./setup-langfuse.sh` 
+`./setup_langfuse.sh` 
 
 ## Script Actions
 
@@ -96,7 +96,7 @@ This script is designed to safely stop and remove Docker containers associated w
 
 1.  **Download the Script:**
     
-    Download the `teardown-langfuse.sh` script to your desired directory.
+    Download the `langfuse_teardown.sh` script to your desired directory.
     
 2.  **Make the Script Executable:**
     
@@ -104,16 +104,14 @@ This script is designed to safely stop and remove Docker containers associated w
     
     bashCopy code
     
-    `chmod +x teardown-langfuse.sh` 
+    `chmod +x langfuse_teardown.sh` 
     
 
 ## Usage
 
 Run the script to stop and remove the Docker containers:
 
-bashCopy code
-
-`./teardown-langfuse.sh` 
+`./langfuse_teardown.sh` 
 
 ## Script Actions
 
