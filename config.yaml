@@ -1,0 +1,9 @@
+postgres:
+  user: 'postgres'
+  password: 'postgres'
+  dbname: 'postgres'
+  port: 5432
+
+langfuse:
+  host: 127.0.0.1
+  nextauth_url: 'http://localhost:8084'
