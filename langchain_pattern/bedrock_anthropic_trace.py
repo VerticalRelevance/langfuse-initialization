@@ -41,5 +41,5 @@ chain = LLMChain(
 )
 
 # and run
-out = chain.invoke(input="Artificial Intelligence", config={"callbacks":[handler]})
+out = chain.invoke(input="The best methods for retrieval augmented generation", config={"callbacks":[handler]})
 print(out)

@@ -82,7 +82,7 @@ docker run --name postgres-langfuse --network langfuse-network -e POSTGRES_USER=
 sleep 30
 
 # Start the Langfuse container
-docker run --name langfuse --network langfuse-network -e DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres-langfuse:5432/$POSTGRES_DB" -e NEXTAUTH_URL="$NEXTAUTH_URL" -e NEXTAUTH_SECRET="$NEXTAUTH_SECRET" -e SALT="$SALT" -p 3000:3000 -d ghcr.io/langfuse/langfuse:latest
+docker run --name langfuse --network langfuse-network -e DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres-langfuse:5432/$POSTGRES_DB" -e NEXTAUTH_URL="$NEXTAUTH_URL" -e NEXTAUTH_SECRET="$NEXTAUTH_SECRET" -e SALT="$SALT" -p $POSTGRES_PORT:3000 -d ghcr.io/langfuse/langfuse:latest
 
 # Wait for containers to start
 sleep 30
@@ -103,10 +103,10 @@ else
 fi
 
 # Health check for Langfuse
-if curl --fail -s http://localhost:3000/ > /dev/null; then
-    echo "Langfuse is up and running on port 3000."
+if curl --fail -s http://localhost:$POSTGRES_PORT/ > /dev/null; then
+    echo "Langfuse is up and running on port $POSTGRES_PORT."
 else
-    echo "Error: Langfuse is not responding on port 3000."
+    echo "Error: Langfuse is not responding on port $POSTGRES_PORT."
     exit 1
 fi
 
