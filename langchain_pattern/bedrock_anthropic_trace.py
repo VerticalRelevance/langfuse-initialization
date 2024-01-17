@@ -13,16 +13,16 @@ import boto3
 from langchain.chains import LLMChain
 
 # Load API keys from environment variables
-PUBLIC_KEY = "pk-lf-22847867-6b8f-4c5e-84c6-3d1370320f63" # these are not sensative keys
-SECRET_KEY = "sk-lf-8c0c33e7-3008-4b16-bd51-8b0dedbe6c61" # these are not sensative keys
-LANGFUSE_HOST = "http://192.168.1.134:3000/" # these are not sensative keys
-OPENAI_API_KEY = os.getenv('WORDPRESS_PERSONAL_OPENAI_API')
+PUBLIC_KEY = os.getenv('LF_PUBLIC_KEY') # these are not sensative keys, 
+SECRET_KEY = os.getenv('LF_PRIVATE_KEY') # these are not sensative keys
+LANGFUSE_HOST = os.getenv('LF_HOST_URL') # Ex. "http://192.168.1.134:3000/"
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Check if keys are set
 if not all([PUBLIC_KEY, SECRET_KEY, LANGFUSE_HOST, OPENAI_API_KEY]):
     raise ValueError("API keys are not set in environment variables")
 
-handler = CallbackHandler(PUBLIC_KEY, SECRET_KEY, LANGFUSE_HOST)
+handler = CallbackHandler(PUBLIC_KEY, SECRET_KEY, LANGFUSE_HOST) # this is where Langfuse integration happens
 
 prompt = ChatPromptTemplate.from_template(
     "Give me small report about {topic}"
@@ -41,5 +41,5 @@ chain = LLMChain(
 )
 
 # and run
-out = chain.invoke(input="The best methods for retrieval augmented generation", config={"callbacks":[handler]})
+out = chain.invoke(input="SRE & Resiliency in AWS", config={"callbacks":[handler]}) # Call to LangChain LangFuse Handler
 print(out)
