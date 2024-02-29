@@ -6,4 +6,5 @@ postgres:
 
 langfuse:
   host: 127.0.0.1
-  nextauth_url: 'http://localhost:3000'
+  port: 3000
+  nextauth_url: 'http://localhost'

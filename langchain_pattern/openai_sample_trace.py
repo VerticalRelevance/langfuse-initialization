@@ -1,16 +1,16 @@
 import os
-from langchain.llms import OpenAI
+from langchain_community.llms import OpenAI
 from langchain.chains import LLMChain
-from langchain.chat_models import ChatAnthropic, ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 from langfuse.callback import CallbackHandler
 
 # Load API keys from environment variables
-PUBLIC_KEY = "pk-lf-41e00a5f-e082-4077-bfa4-bd7e0e994b95" # these are not sensative keys
-SECRET_KEY = "sk-lf-6dbc5066-324f-4622-9623-8030d2434802" # these are not sensative keys
-LANGFUSE_HOST = "http://192.168.1.134:3000/" # these are not sensative keys
-OPENAI_API_KEY = os.getenv('WORDPRESS_PERSONAL_OPENAI_API')
+PUBLIC_KEY = os.getenv('LF_PUBLIC_KEY') # these are not sensative keys, 
+SECRET_KEY = os.getenv('LF_PRIVATE_KEY') # these are not sensative keys
+LANGFUSE_HOST = os.getenv('LF_HOST_URL') # Ex. "http://192.168.1.134:3000/"
+OPENAI_API_KEY = os.getenv('VR_OPENAI_API_KEY')
 
 # Check if keys are set
 if not all([PUBLIC_KEY, SECRET_KEY, LANGFUSE_HOST, OPENAI_API_KEY]):
@@ -26,8 +26,6 @@ model = ChatOpenAI(
     openai_api_key=OPENAI_API_KEY
 )  # swap Anthropic for OpenAI with `ChatOpenAI` and `openai_api_key`
 output_parser = StrOutputParser()
-
-from langchain.chains import LLMChain
 
 chain = LLMChain(
     prompt=prompt,

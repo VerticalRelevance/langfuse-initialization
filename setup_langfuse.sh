@@ -34,6 +34,7 @@ load_config_from_yaml() {
     POSTGRES_DB=$(yq e '.postgres.dbname' "$config_file")
     POSTGRES_PORT=$(yq e '.postgres.port' "$config_file")
     LANGFUSE_HOST=$(yq e '.langfuse.host' "$config_file")
+    LANGFUSE_PORT=$(yq e '.langfuse.port' "$config_file")
     NEXTAUTH_URL=$(yq e '.langfuse.nextauth_url' "$config_file")
 }
 
@@ -61,7 +62,8 @@ else
     POSTGRES_DB=$3
     POSTGRES_PORT=$4
     LANGFUSE_HOST=$5
-    NEXTAUTH_URL=$6
+    LANGFUSE_HOST=$6
+    NEXTAUTH_URL=$7
 fi
 
 # Generate secrets
@@ -82,7 +84,7 @@ docker run --name postgres-langfuse --network langfuse-network -e POSTGRES_USER=
 sleep 30
 
 # Start the Langfuse container
-docker run --name langfuse --network langfuse-network -e DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres-langfuse:5432/$POSTGRES_DB" -e NEXTAUTH_URL="$NEXTAUTH_URL" -e NEXTAUTH_SECRET="$NEXTAUTH_SECRET" -e SALT="$SALT" -p $POSTGRES_PORT:3000 -d ghcr.io/langfuse/langfuse:latest
+docker run --name langfuse --network langfuse-network -e DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres-langfuse:5432/$POSTGRES_DB" -e NEXTAUTH_URL="$NEXTAUTH_URL:$LANGFUSE_PORT" -e NEXTAUTH_SECRET="$NEXTAUTH_SECRET" -e SALT="$SALT" -p "$LANGFUSE_PORT":3000 -d ghcr.io/langfuse/langfuse:latest
 
 # Wait for containers to start
 sleep 30
@@ -103,10 +105,10 @@ else
 fi
 
 # Health check for Langfuse
-if curl --fail -s http://localhost:$POSTGRES_PORT/ > /dev/null; then
-    echo "Langfuse is up and running on port $POSTGRES_PORT."
+if curl --fail -s http://localhost:"$LANGFUSE_PORT" > /dev/null; then
+    echo "Langfuse is up and running on port $LANGFUSE_PORT."
 else
-    echo "Error: Langfuse is not responding on port $POSTGRES_PORT."
+    echo "Error: Langfuse is not responding on port $LANGFUSE_PORT."
     exit 1
 fi
 
