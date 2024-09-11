@@ -12,10 +12,9 @@ import boto3
 from langchain.chains import LLMChain
 
 # Load API keys from environment variables
-PUBLIC_KEY = os.getenv('LF_PUBLIC_KEY') # these are not sensative keys, 
-SECRET_KEY = os.getenv('LF_PRIVATE_KEY') # these are not sensative keys
-LANGFUSE_HOST = os.getenv('LF_HOST_URL') # Ex. "http://192.168.1.134:3000/"
-LANGFUSE_HOST = "http://192.168.1.134:3000/" # these are not sensative keys
+PUBLIC_KEY = os.getenv('LF_PUBLIC_KEY') 
+SECRET_KEY = os.getenv('LF_PRIVATE_KEY')
+LANGFUSE_HOST = os.getenv('LF_HOST_URL')
 
 # Check if keys are set
 if not all([PUBLIC_KEY, SECRET_KEY, LANGFUSE_HOST]):
