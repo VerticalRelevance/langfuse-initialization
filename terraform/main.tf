@@ -10,16 +10,23 @@ variable "subnet_ids" { type = list(string) }
 variable "ecs_task_cpu" {}
 variable "ecs_task_memory" {}
 variable "ecs_task_desired_count" {}
-variable "harbor_image_url" {}
 variable "postgres_port" {}
-variable "langfuse_host" {}
 variable "langfuse_port" {}
-variable "nextauth_url" {}
 variable "db_name" {}
 variable "db_username" {}
 variable "db_password" {}
-variable "acm_certificate_arn" {}
 variable "db_instance_class" {}
+variable "elb_account_id" {}
+
+
+resource "aws_ecr_repository" "lf_repo" {
+  name                 = "lf-repo"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
 
 # ECS Cluster
 resource "aws_ecs_cluster" "langfuse_cluster" {
@@ -48,7 +55,7 @@ resource "aws_ecs_task_definition" "langfuse_task" {
   container_definitions = jsonencode([
     {
       name  = "langfuse"
-      image = var.harbor_image_url
+      image = "${aws_ecr_repository.lf_repo.repository_url}:latest"
       portMappings = [
         {
           containerPort = var.langfuse_port
@@ -56,12 +63,12 @@ resource "aws_ecs_task_definition" "langfuse_task" {
         }
       ]
       environment = [
-        { name = "NEXTAUTH_URL", value = var.nextauth_url },
+        { name = "NEXTAUTH_URL", value = "http://${aws_lb.langfuse_alb.dns_name}"},
         { name = "DATABASE_URL", value = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.langfuse_db.endpoint}/${var.db_name}" }
       ]
       secrets = [
-        { name = "NEXTAUTH_SECRET", valueFrom = "${data.aws_secretsmanager_secret.langfuse_secrets.arn}:NEXTAUTH_SECRET::" },
-        { name = "SALT", valueFrom = "${data.aws_secretsmanager_secret.langfuse_secrets.arn}:SALT::" }
+        { name = "NEXTAUTH_SECRET", valueFrom = "${data.aws_secretsmanager_secret.langfuse_secrets.arn}:langfuse_nextauth_secret::" },
+        { name = "SALT", valueFrom = "${data.aws_secretsmanager_secret.langfuse_secrets.arn}:langfuse_salt::" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -72,11 +79,11 @@ resource "aws_ecs_task_definition" "langfuse_task" {
         }
       }
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:${var.langfuse_port}/health || exit 1"]
+        command     = ["CMD-SHELL", "curl http://localhost:${var.langfuse_port}/api/public/health"]
         interval    = 30
         timeout     = 5
         retries     = 3
-        startPeriod = 60
+        startPeriod = 80
       }
     }
   ])
@@ -149,7 +156,7 @@ resource "aws_lb" "langfuse_alb" {
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = var.subnet_ids
 
-  enable_deletion_protection = true
+  enable_deletion_protection = false
 
   access_logs {
     bucket  = aws_s3_bucket.alb_logs.bucket
@@ -185,10 +192,8 @@ resource "aws_lb_target_group" "langfuse_tg" {
 
 resource "aws_lb_listener" "langfuse_listener" {
   load_balancer_arn = aws_lb.langfuse_alb.arn
-  port              = "443"
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
-  certificate_arn   = var.acm_certificate_arn
+  port              = "80"
+  protocol          = "HTTP"
 
   default_action {
     type             = "forward"
@@ -202,8 +207,8 @@ resource "aws_security_group" "alb_sg" {
   vpc_id      = var.vpc_id
 
   ingress {
-    from_port   = 443
-    to_port     = 443
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -222,7 +227,7 @@ resource "aws_security_group" "alb_sg" {
 
 # S3 bucket for ALB access logs
 resource "aws_s3_bucket" "alb_logs" {
-  bucket = "langfuse-alb-logs"
+  bucket = "langfuse-alb-logs-sr"
 
   tags = {
     Name = "Langfuse ALB Logs"
@@ -238,7 +243,7 @@ resource "aws_s3_bucket_policy" "alb_logs" {
       {
         Effect = "Allow"
         Principal = {
-          AWS = "arn:aws:iam::elb-account-id:root"
+          AWS = "arn:aws:iam::${var.elb_account_id}:root"
         }
         Action   = "s3:PutObject"
         Resource = "${aws_s3_bucket.alb_logs.arn}/*"
@@ -249,7 +254,7 @@ resource "aws_s3_bucket_policy" "alb_logs" {
 
 # IAM Roles
 resource "aws_iam_role" "ecs_execution_role" {
-  name = "langfuse-ecs-execution-role"
+  name = "langfuse-ecs-execution-role-sr"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -274,6 +279,35 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Create a custom policy for ECR access
+resource "aws_iam_policy" "ecr_access_policy" {
+  name        = "ecr_access_policy"
+  path        = "/"
+  description = "IAM policy for ECR access"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Attach the ECR access policy to the ECS execution role
+resource "aws_iam_role_policy_attachment" "ecs_ecr_policy_attachment" {
+  role       = aws_iam_role.ecs_execution_role.name
+  policy_arn = aws_iam_policy.ecr_access_policy.arn
+}
+
 resource "aws_iam_role_policy" "secrets_access" {
   name = "secrets-access"
   role = aws_iam_role.ecs_execution_role.id
@@ -291,7 +325,7 @@ resource "aws_iam_role_policy" "secrets_access" {
 }
 
 resource "aws_iam_role" "ecs_task_role" {
-  name = "langfuse-ecs-task-role"
+  name = "langfuse-ecs-task-role-sr"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -351,7 +385,7 @@ resource "aws_sns_topic" "langfuse_alerts" {
 
 # Output
 output "langfuse_url" {
-  value       = "https://${aws_lb.langfuse_alb.dns_name}"
+  value       = "http://${aws_lb.langfuse_alb.dns_name}"
   description = "The URL of the Langfuse application"
 }
 
@@ -418,7 +452,7 @@ resource "aws_security_group" "rds_sg" {
 
 # AWS Secrets Manager for sensitive data
 data "aws_secretsmanager_secret" "langfuse_secrets" {
-  name = "langfuse-secrets"
+  name = "langfuse-config"
 }
 
 data "aws_secretsmanager_secret_version" "current" {
