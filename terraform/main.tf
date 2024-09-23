@@ -78,13 +78,13 @@ resource "aws_ecs_task_definition" "langfuse_task" {
           awslogs-stream-prefix = "langfuse"
         }
       }
-      healthCheck = {
-        command     = ["CMD-SHELL", "curl http://localhost:${var.langfuse_port}/api/public/health"]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 80
-      }
+      # healthCheck = {
+      #   command     = ["CMD-SHELL", "curl -v -f http://localhost:3000/api/public/health || exit 1"]
+      #   interval    = 30
+      #   timeout     = 10
+      #   retries     = 3
+      #   startPeriod = 80
+      # }
     }
   ])
 
@@ -177,7 +177,8 @@ resource "aws_lb_target_group" "langfuse_tg" {
   target_type = "ip"
 
   health_check {
-    path                = "/health"
+    path                = "/api/public/health"
+    port                = var.langfuse_port
     healthy_threshold   = 3
     unhealthy_threshold = 3
     timeout             = 5
