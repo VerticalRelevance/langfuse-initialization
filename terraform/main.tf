@@ -78,13 +78,14 @@ resource "aws_ecs_task_definition" "langfuse_task" {
           awslogs-stream-prefix = "langfuse"
         }
       }
-      # healthCheck = {
-      #   command     = ["CMD-SHELL", "curl -v -f http://localhost:3000/api/public/health || exit 1"]
-      #   interval    = 30
-      #   timeout     = 10
-      #   retries     = 3
-      #   startPeriod = 80
-      # }
+      healthCheck = {
+        # command     = ["CMD-SHELL", "curl -v -f http://localhost:${var.langfuse_port}/api/public/health || exit 1"]
+        command     = ["CMD-SHELL", "curl -s --fail http://localhost:${var.langfuse_port}/api/public/health || exit 1"]
+        interval    = 30
+        timeout     = 10
+        retries     = 3
+        startPeriod = 80
+      }
     }
   ])
 
