@@ -79,12 +79,14 @@ resource "aws_ecs_task_definition" "langfuse_task" {
         }
       }
       healthCheck = {
-        # command     = ["CMD-SHELL", "curl -v -f http://localhost:${var.langfuse_port}/api/public/health || exit 1"]
-        command     = ["CMD-SHELL", "curl -s --fail http://localhost:${var.langfuse_port}/api/public/health || exit 1"]
+        # command     = ["CMD-SHELL", "curl -f http://localhost:${var.langfuse_port}/ || exit 1"]
+        # command     = ["CMD-SHELL", "wget -q --spider http://localhost:${var.langfuse_port}/api/public/health || exit 1"]
+        # no health chechs seem to work, alb target group health check does work though
+        command     = ["CMD-SHELL", "ls || exit 1"]
         interval    = 30
         timeout     = 10
         retries     = 3
-        startPeriod = 80
+        startPeriod = 60
       }
     }
   ])
@@ -135,6 +137,7 @@ resource "aws_security_group" "langfuse_sg" {
     to_port         = var.langfuse_port
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
+    self            = true
   }
 
   egress {

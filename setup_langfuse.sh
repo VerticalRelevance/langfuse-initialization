@@ -15,11 +15,11 @@ install_package() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 
-# Install required packages
-install_package python3
-install_package pip3
-install_package yq
-install_package openssl
+# # Install required packages
+# install_package python3
+# install_package pip3
+# install_package yq
+# install_package openssl
 
 # Function to load configuration from YAML file
 load_config_from_yaml() {
@@ -72,7 +72,7 @@ SALT=$(openssl rand -base64 32)
 
 # Pull the latest Docker images
 docker pull postgres
-docker pull ghcr.io/langfuse/langfuse:latest
+# docker pull ghcr.io/langfuse/langfuse:latest
 
 # Create a Docker network if it doesn't exist
 docker network ls | grep -q langfuse-network || docker network create langfuse-network
