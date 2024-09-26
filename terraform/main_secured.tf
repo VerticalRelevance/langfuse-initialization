@@ -4,19 +4,39 @@ provider "aws" {
 }
 
 # Variables
-variable "aws_region" {}
-variable "vpc_id" {}
-variable "subnet_ids" { type = list(string) }
-variable "ecs_task_cpu" {}
-variable "ecs_task_memory" {}
-variable "ecs_task_desired_count" {}
-variable "postgres_port" {}
-variable "langfuse_port" {}
-variable "db_name" {}
-variable "db_username" {}
-variable "db_password" {}
-variable "db_instance_class" {}
-variable "elb_account_id" {}
+variable "aws_region" {
+  type        = string
+}
+variable "vpc_id" {
+  type        = string
+}
+variable "subnet_ids" { 
+  type        = list(string) 
+}
+variable "ecs_task_cpu" {
+  type        = string
+}
+variable "ecs_task_memory" {
+  type        = string
+}
+variable "ecs_task_desired_count" {
+  type        = number
+}
+variable "postgres_port" {
+  type        = number
+}
+variable "langfuse_port" {
+  type        = number
+}
+variable "db_name" {
+  type        = string
+}
+variable "db_instance_class" {
+  type        = string
+}
+variable "elb_account_id" {
+  type        = string
+}
 variable "acm_certificate_arn" {
   description = "ARN of the ACM certificate for HTTPS"
   type        = string
@@ -93,7 +113,7 @@ resource "aws_ecs_task_definition" "langfuse_task" {
       ]
       environment = [
         { name = "NEXTAUTH_URL", value = "http://${aws_lb.langfuse_alb.dns_name}"},
-        { name = "DATABASE_URL", value = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.langfuse_db.endpoint}/${var.db_name}" }
+        { name = "DATABASE_URL", value = "postgresql://${local.secrets.postgres.username}:${local.secrets.postgres.password}@${aws_db_instance.langfuse_db.endpoint}/${var.db_name}" }
       ]
       secrets = [
         { name = "NEXTAUTH_SECRET", valueFrom = "${data.aws_secretsmanager_secret.langfuse_secrets.arn}:langfuse_nextauth_secret::" },
@@ -228,7 +248,7 @@ resource "aws_lb_listener" "langfuse_listener" {
   load_balancer_arn = aws_lb.langfuse_alb.arn
   port              = "443"
   protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2021-06"
   certificate_arn   = var.acm_certificate_arn
 
   default_action {
@@ -362,6 +382,11 @@ resource "aws_iam_role_policy" "secrets_access" {
         Action   = ["secretsmanager:GetSecretValue"]
         Effect   = "Allow"
         Resource = data.aws_secretsmanager_secret.langfuse_secrets.arn
+        Condition = {
+          "StringEquals" : {
+            "secretsmanager:VersionStage" : "AWSCURRENT"
+          }
+        }
       }
     ]
   })
@@ -420,6 +445,7 @@ resource "aws_cloudwatch_metric_alarm" "high_cpu_utilization" {
 # SNS Topic for Alarms
 resource "aws_sns_topic" "langfuse_alerts" {
   name = "langfuse-alerts"
+  kms_master_key_id = aws_kms_key.sns_encryption_key.arn
 
   tags = {
     Name = "Langfuse Alerts SNS Topic"
@@ -429,15 +455,6 @@ resource "aws_sns_topic" "langfuse_alerts" {
 resource "aws_kms_key" "sns_encryption_key" {
   description = "KMS key for SNS topic encryption"
   enable_key_rotation = true
-}
-
-resource "aws_sns_topic" "langfuse_alerts" {
-  name = "langfuse-alerts"
-  kms_master_key_id = aws_kms_key.sns_encryption_key.arn
-
-  tags = {
-    Name = "Langfuse Alerts SNS Topic"
-  }
 }
 
 # Output
@@ -459,8 +476,8 @@ resource "aws_db_instance" "langfuse_db" {
   instance_class       = var.db_instance_class
   allocated_storage    = 20
   db_name              = var.db_name
-  username             = var.db_username
-  password             = var.db_password
+  username             = local.secrets.postgres.username
+  password             = local.secrets.postgres.password
   skip_final_snapshot  = true
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   db_subnet_group_name   = aws_db_subnet_group.langfuse_db_subnet_group.name
