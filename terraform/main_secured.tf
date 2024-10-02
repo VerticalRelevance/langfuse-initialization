@@ -21,6 +21,14 @@ variable "acm_certificate_arn" {
   description = "ARN of the ACM certificate for HTTPS"
   type        = string
 }
+variable "domain_name" {
+  description = "The existing domain name to use for the Langfuse application"
+  type        = string
+}
+variable "route53_zone_id" {
+  description = "The existing Route 53 Hosted Zone ID"
+  type        = string
+}
 
 resource "aws_ecr_repository" "lf_repo" {
   name                 = "lf-repo"
@@ -229,7 +237,7 @@ resource "aws_lb_listener" "langfuse_listener" {
   load_balancer_arn = aws_lb.langfuse_alb.arn
   port              = "443"
   protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2021-06"
+  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
   certificate_arn   = var.acm_certificate_arn
 
   default_action {
@@ -566,4 +574,18 @@ resource "aws_kms_alias" "secrets_key_alias" {
 # Update the data source to use the new key
 data "aws_kms_key" "secrets_key" {
   key_id = aws_kms_key.secrets_key.arn
+}
+
+resource "aws_route53_record" "langfuse" {
+  zone_id = var.route53_zone_id
+  name    = var.domain_name
+  type    = "A"
+
+  allow_overwrite = true  # This allows Terraform to update the existing record
+
+  alias {
+    name                   = aws_lb.langfuse_alb.dns_name
+    zone_id                = aws_lb.langfuse_alb.zone_id
+    evaluate_target_health = true
+  }
 }
