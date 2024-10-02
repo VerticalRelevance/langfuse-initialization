@@ -1,38 +1,18 @@
 # Provider configuration
 provider "aws" {
-  region = var.aws_region
+  region = "us-east-1"
 }
 
 # Variables
 variable "aws_region" {
-  type        = string
+  type    = string
+  default = "us-east-1"
 }
 variable "vpc_id" {
   type        = string
 }
 variable "subnet_ids" { 
   type        = list(string) 
-}
-variable "ecs_task_cpu" {
-  type        = string
-}
-variable "ecs_task_memory" {
-  type        = string
-}
-variable "ecs_task_desired_count" {
-  type        = number
-}
-variable "postgres_port" {
-  type        = number
-}
-variable "langfuse_port" {
-  type        = number
-}
-variable "db_name" {
-  type        = string
-}
-variable "db_instance_class" {
-  type        = string
 }
 variable "elb_account_id" {
   type        = string
@@ -52,6 +32,7 @@ resource "aws_ecr_repository" "lf_repo" {
 
   encryption_configuration {
     encryption_type = "KMS"
+    kms_key         = aws_kms_key.general_key.arn
   }
 }
 
@@ -96,8 +77,8 @@ resource "aws_ecs_task_definition" "langfuse_task" {
   family                   = "langfuse-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = var.ecs_task_cpu
-  memory                   = var.ecs_task_memory
+  cpu                      = local.secrets.ecs_task_cpu
+  memory                   = local.secrets.ecs_task_memory
   execution_role_arn       = aws_iam_role.ecs_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
@@ -107,13 +88,13 @@ resource "aws_ecs_task_definition" "langfuse_task" {
       image = "${aws_ecr_repository.lf_repo.repository_url}:latest"
       portMappings = [
         {
-          containerPort = var.langfuse_port
-          hostPort      = var.langfuse_port
+          containerPort = local.secrets.langfuse_port
+          hostPort      = local.secrets.langfuse_port
         }
       ]
       environment = [
         { name = "NEXTAUTH_URL", value = "http://${aws_lb.langfuse_alb.dns_name}"},
-        { name = "DATABASE_URL", value = "postgresql://${local.secrets.postgres.username}:${local.secrets.postgres.password}@${aws_db_instance.langfuse_db.endpoint}/${var.db_name}" }
+        { name = "DATABASE_URL", value = "postgresql://${local.secrets.postgres_username}:${local.secrets.postgres_password}@${aws_db_instance.langfuse_db.endpoint}/${local.secrets.postgres_db_name}" }
       ]
       secrets = [
         { name = "NEXTAUTH_SECRET", valueFrom = "${data.aws_secretsmanager_secret.langfuse_secrets.arn}:langfuse_nextauth_secret::" },
@@ -123,7 +104,7 @@ resource "aws_ecs_task_definition" "langfuse_task" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.langfuse_logs.name
-          awslogs-region        = var.aws_region
+          awslogs-region        = "us-east-1"
           awslogs-stream-prefix = "langfuse"
         }
       }
@@ -151,7 +132,7 @@ resource "aws_ecs_service" "langfuse_service" {
   cluster         = aws_ecs_cluster.langfuse_cluster.id
   task_definition = aws_ecs_task_definition.langfuse_task.arn
   launch_type     = "FARGATE"
-  desired_count   = var.ecs_task_desired_count
+  desired_count   = local.secrets.ecs_task_desired_count
 
   network_configuration {
     subnets          = var.subnet_ids
@@ -162,7 +143,7 @@ resource "aws_ecs_service" "langfuse_service" {
   load_balancer {
     target_group_arn = aws_lb_target_group.langfuse_tg.arn
     container_name   = "langfuse"
-    container_port   = var.langfuse_port
+    container_port   = local.secrets.langfuse_port
   }
 
   deployment_circuit_breaker {
@@ -182,8 +163,8 @@ resource "aws_security_group" "langfuse_sg" {
   vpc_id      = var.vpc_id
 
   ingress {
-    from_port       = var.langfuse_port
-    to_port         = var.langfuse_port
+    from_port       = local.secrets.langfuse_port
+    to_port         = local.secrets.langfuse_port
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
     self            = true
@@ -231,7 +212,7 @@ resource "aws_lb_target_group" "langfuse_tg" {
 
   health_check {
     path                = "/api/public/health"
-    port                = var.langfuse_port
+    port                = local.secrets.langfuse_port
     healthy_threshold   = 3
     unhealthy_threshold = 3
     timeout             = 5
@@ -371,6 +352,25 @@ resource "aws_iam_role_policy_attachment" "ecs_ecr_policy_attachment" {
   policy_arn = aws_iam_policy.ecr_access_policy.arn
 }
 
+# Data source for the KMS key
+data "aws_kms_key" "secrets_key" {
+  key_id = "alias/secretsmanager-genai-virginia"
+}
+
+# AWS Secrets Manager for sensitive data
+data "aws_secretsmanager_secret" "langfuse_secrets" {
+  name = "poc/langfuse/langfuse-config"
+}
+
+data "aws_secretsmanager_secret_version" "current" {
+  secret_id = data.aws_secretsmanager_secret.langfuse_secrets.id
+}
+
+locals {
+  secrets = jsondecode(data.aws_secretsmanager_secret_version.current.secret_string)
+}
+
+# Update the secrets access policy to include KMS decrypt permission
 resource "aws_iam_role_policy" "secrets_access" {
   name = "secrets-access"
   role = aws_iam_role.ecs_execution_role.id
@@ -382,11 +382,11 @@ resource "aws_iam_role_policy" "secrets_access" {
         Action   = ["secretsmanager:GetSecretValue"]
         Effect   = "Allow"
         Resource = data.aws_secretsmanager_secret.langfuse_secrets.arn
-        Condition = {
-          "StringEquals" : {
-            "secretsmanager:VersionStage" : "AWSCURRENT"
-          }
-        }
+      },
+      {
+        Action   = ["kms:Decrypt"]
+        Effect   = "Allow"
+        Resource = data.aws_kms_key.secrets_key.arn
       }
     ]
   })
@@ -417,6 +417,7 @@ resource "aws_iam_role" "ecs_task_role" {
 resource "aws_cloudwatch_log_group" "langfuse_logs" {
   name              = "/ecs/langfuse"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.general_key.arn
 
   tags = {
     Name = "Langfuse CloudWatch Logs"
@@ -445,16 +446,11 @@ resource "aws_cloudwatch_metric_alarm" "high_cpu_utilization" {
 # SNS Topic for Alarms
 resource "aws_sns_topic" "langfuse_alerts" {
   name = "langfuse-alerts"
-  kms_master_key_id = aws_kms_key.sns_encryption_key.arn
+  kms_master_key_id = aws_kms_key.general_key.arn
 
   tags = {
     Name = "Langfuse Alerts SNS Topic"
   }
-}
-
-resource "aws_kms_key" "sns_encryption_key" {
-  description = "KMS key for SNS topic encryption"
-  enable_key_rotation = true
 }
 
 # Output
@@ -473,17 +469,18 @@ resource "aws_db_instance" "langfuse_db" {
   identifier           = "langfuse-db"
   engine               = "postgres"
   engine_version       = "13"
-  instance_class       = var.db_instance_class
+  instance_class       = local.secrets.postgres_instance_class
   allocated_storage    = 20
-  db_name              = var.db_name
-  username             = local.secrets.postgres.username
-  password             = local.secrets.postgres.password
+  db_name              = local.secrets.postgres_db_name
+  username             = local.secrets.postgres_username
+  password             = local.secrets.postgres_password
   skip_final_snapshot  = true
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   db_subnet_group_name   = aws_db_subnet_group.langfuse_db_subnet_group.name
   backup_retention_period = 7
   multi_az               = true
   storage_encrypted      = true
+  kms_key_id             = aws_kms_key.general_key.arn
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
   iam_database_authentication_enabled = true
 
@@ -526,15 +523,47 @@ resource "aws_security_group" "rds_sg" {
   }
 }
 
-# AWS Secrets Manager for sensitive data
-data "aws_secretsmanager_secret" "langfuse_secrets" {
-  name = "langfuse-config"
+# Create a KMS key for general use
+resource "aws_kms_key" "general_key" {
+  description             = "KMS key for general encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = {
+    Name = "Langfuse General Encryption Key"
+  }
 }
 
-data "aws_secretsmanager_secret_version" "current" {
-  secret_id = data.aws_secretsmanager_secret.langfuse_secrets.id
+# Update S3 Bucket
+resource "aws_s3_bucket_server_side_encryption_configuration" "alb_logs_encryption" {
+  bucket = aws_s3_bucket.alb_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.general_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
 }
 
-locals {
-  secrets = jsondecode(data.aws_secretsmanager_secret_version.current.secret_string)
+# The Secrets Manager secret is already using a KMS key
+# If you want to manage this key with Terraform, you can create it like this:
+resource "aws_kms_key" "secrets_key" {
+  description             = "KMS key for Secrets Manager encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = {
+    Name = "Langfuse Secrets Encryption Key"
+  }
+}
+
+resource "aws_kms_alias" "secrets_key_alias" {
+  name          = "alias/secretsmanager-genai-virginia"
+  target_key_id = aws_kms_key.secrets_key.key_id
+}
+
+# Update the data source to use the new key
+data "aws_kms_key" "secrets_key" {
+  key_id = aws_kms_key.secrets_key.arn
 }
