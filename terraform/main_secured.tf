@@ -4,30 +4,40 @@ provider "aws" {
 }
 
 # Variables
-variable "aws_region" {
-  type    = string
-  default = "us-east-1"
-}
 variable "vpc_id" {
   type        = string
+  description = "The ID of the VPC where resources will be deployed"
 }
+
 variable "subnet_ids" { 
   type        = list(string) 
+  description = "List of subnet IDs where resources will be deployed"
 }
+
 variable "elb_account_id" {
   type        = string
+  description = "The AWS account ID for the Elastic Load Balancing service"
+  # default     = "012345678902"  # This is the ELB account ID for us-east-1
 }
+
 variable "acm_certificate_arn" {
+  type        = string
   description = "ARN of the ACM certificate for HTTPS"
-  type        = string
 }
+
 variable "domain_name" {
-  description = "The existing domain name to use for the Langfuse application"
   type        = string
+  description = "The domain name for the Langfuse application"
 }
+
 variable "route53_zone_id" {
-  description = "The existing Route 53 Hosted Zone ID"
   type        = string
+  description = "The Route 53 Hosted Zone ID"
+}
+
+variable "alb_ingress_cidr_blocks" {
+  type        = list(string)
+  description = "List of CIDR blocks to allow ingress to the ALB"
 }
 
 resource "aws_ecr_repository" "lf_repo" {
@@ -101,7 +111,7 @@ resource "aws_ecs_task_definition" "langfuse_task" {
         }
       ]
       environment = [
-        { name = "NEXTAUTH_URL", value = "http://${aws_lb.langfuse_alb.dns_name}"},
+        { name = "NEXTAUTH_URL", value = "https://${var.domain_name}"},
         { name = "DATABASE_URL", value = "postgresql://${local.secrets.postgres_username}:${local.secrets.postgres_password}@${aws_db_instance.langfuse_db.endpoint}/${local.secrets.postgres_db_name}" }
       ]
       secrets = [
@@ -237,7 +247,7 @@ resource "aws_lb_listener" "langfuse_listener" {
   load_balancer_arn = aws_lb.langfuse_alb.arn
   port              = "443"
   protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2021-06"
   certificate_arn   = var.acm_certificate_arn
 
   default_action {
@@ -255,7 +265,7 @@ resource "aws_security_group" "alb_sg" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["your_specific_ip_range"]  # Replace with specific IP ranges
+    cidr_blocks = var.alb_ingress_cidr_blocks
   }
 
   egress {
@@ -463,7 +473,7 @@ resource "aws_sns_topic" "langfuse_alerts" {
 
 # Output
 output "langfuse_url" {
-  value       = "http://${aws_lb.langfuse_alb.dns_name}"
+  value       = "https://${var.domain_name}"
   description = "The URL of the Langfuse application"
 }
 
@@ -580,8 +590,6 @@ resource "aws_route53_record" "langfuse" {
   zone_id = var.route53_zone_id
   name    = var.domain_name
   type    = "A"
-
-  allow_overwrite = true  # This allows Terraform to update the existing record
 
   alias {
     name                   = aws_lb.langfuse_alb.dns_name
