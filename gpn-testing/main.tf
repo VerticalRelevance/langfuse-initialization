@@ -26,6 +26,7 @@ resource "aws_security_group" "lambda_sg" {
     to_port     = 0
     protocol    = "-1"  # Allow all outbound traffic
     cidr_blocks = ["10.0.0.0/16"]  # Adjust to your VPC CIDR
+    prefix_list_ids = [data.aws_prefix_list.dynamodb_prefix_list.id]
   }
 
   # Allow inbound traffic from VPC (if needed)
@@ -35,6 +36,10 @@ resource "aws_security_group" "lambda_sg" {
     protocol    = "-1"  # Allow all inbound traffic
     cidr_blocks = ["10.0.0.0/16"]  # Adjust to your VPC CIDR
   }
+}
+
+data "aws_prefix_list" "dynamodb_prefix_list" {
+  name = "com.amazonaws.us-east-1.dynamodb"
 }
 
 # Step 4: Create a Lambda Execution Role

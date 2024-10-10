@@ -468,142 +468,24 @@ locals {
   secrets = jsondecode(data.aws_secretsmanager_secret_version.current.secret_string)
 }
 
-# resource "aws_security_group" "dynamodb_endpoint_sg" {
-#   name        = "dynamodb-endpoint-sg"
-#   description = "Security group for DynamoDB VPC endpoint"
-#   vpc_id      = var.vpc_id
+resource "aws_security_group" "dynamodb_endpoint_sg" {
+  name        = "dynamodb-endpoint-sg"
+  description = "Security group for DynamoDB VPC endpoint"
+  vpc_id      = data.aws_vpc.existing.id
 
-#   ingress {
-#     from_port   = 443
-#     to_port     = 443
-#     protocol    = "tcp"
-#     cidr_blocks = ["10.0.0.0/16"]
-#   }
-# }
-
-# resource "aws_vpc_endpoint" "dynamodb" {
-#   vpc_id = var.vpc_id
-#   service_name = "com.amazonaws.us-east-2.dynamodb"
-#   vpc_endpoint_type = "Gateway"
-#   route_table_ids = ["rtb-0e8050367d3fff8b2"]
-# }
-
-# IAM Role for Lambda
-resource "aws_iam_role" "lambda_role" {
-  name = "lambda_dynamodb_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-# IAM Policy for Lambda to access DynamoDB
-resource "aws_iam_role_policy" "lambda_dynamodb_policy" {
-  name = "lambda_dynamodb_policy"
-  role = aws_iam_role.lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:ListTables",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:Query",
-          "dynamodb:Scan"
-        ]
-        Resource = "arn:aws:dynamodb:us-east-2:*:table/*"
-      }
-    ]
-  })
-}
-
-# CloudWatch Logs policy for Lambda
-resource "aws_iam_role_policy_attachment" "lambda_logs" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-
-# Attach Policies to the IAM Role
-resource "aws_iam_policy" "lambda_vpc_permissions_policy" {
-  name = "lambda_vpc_permissions_policy"
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Action   = [
-          "ec2:CreateNetworkInterface",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DeleteNetworkInterface"
-        ],
-        Effect   = "Allow",
-        Resource = "*"
-      },
-      {
-        Action   = "logs:*",
-        Effect   = "Allow",
-        Resource = "arn:aws:logs:*:*:*"
-      }
-    ]
-  })
-}
-
-# Attach the policy to the Lambda execution role
-resource "aws_iam_role_policy_attachment" "lambda_vpc_permissions" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = aws_iam_policy.lambda_vpc_permissions_policy.arn
-}
-
-# Security group for Lambda
-resource "aws_security_group" "lambda_sg" {
-  name        = "lambda-sg"
-  description = "Security group for Lambda function"
-  vpc_id      = var.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"  
-    cidr_blocks = ["10.0.0.0/16"]
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.existing.cidr_block]
   }
 }
 
-# Attach policy for S3 List access
-resource "aws_iam_policy" "s3_list_policy" {
-  name        = "LambdaS3ListPolicy"
-  description = "Policy to allow Lambda to list S3 buckets"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-# Attach the policy to the IAM Role
-resource "aws_iam_role_policy_attachment" "s3_list_policy_attachment" {
-  policy_arn = aws_iam_policy.s3_list_policy.arn
-  role       = aws_iam_role.lambda_role.name
+resource "aws_vpc_endpoint" "dynamodb" {
+  vpc_id = var.vpc_id
+  service_name = "com.amazonaws.${data.aws_region.curren.name}.dynamodb"
+  private_dns_enabled = true
+  vpc_endpoint_type = "Interface"
+  subnet_ids = ["subnet-0108fec9d7983ae44", "subnet-0b0ff2a9b3c2d4689"]
+  security_group_ids = [aws_security_group.dynamodb_endpoint_sg.id]
 }
